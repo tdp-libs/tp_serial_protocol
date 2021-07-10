@@ -1,5 +1,5 @@
-#ifndef tp_serial_protocol_SerialInterface_h
-#define tp_serial_protocol_SerialInterface_h
+#ifndef tp_serial_protocol_SimpleSerialInterface_h
+#define tp_serial_protocol_SimpleSerialInterface_h
 
 #include "tp_serial_protocol/Globals.h"
 
@@ -17,7 +17,7 @@ struct PortDetails;
 struct SerialMessage;
 
 //##################################################################################################
-class TP_SERIAL_PROTOCOL_SHARED_EXPORT SerialInterface
+class TP_SERIAL_PROTOCOL_SHARED_EXPORT SimpleSerialInterface
 {
 public:
   //################################################################################################
@@ -26,29 +26,26 @@ public:
   \param crossThreadCallbackFactory
   \param configurePort_callback will be called in a thread to configure the serial port.
   */
-  SerialInterface(const PortDetails& port,
-                  tp_utils::AbstractCrossThreadCallbackFactory* crossThreadCallbackFactory,
-                  const std::function<void(serial::Serial&, const PortDetails&)>& configurePort_callback=configurePortCallback);
+  SimpleSerialInterface(const PortDetails& port,
+                        tp_utils::AbstractCrossThreadCallbackFactory* crossThreadCallbackFactory,
+                        const std::function<void(serial::Serial&, const PortDetails&)>& configurePort_callback=configurePortCallback);
 
   //################################################################################################
-  ~SerialInterface();
+  ~SimpleSerialInterface();
 
   //################################################################################################
   bool connected();
 
   //################################################################################################
-  void sendMessage(const SerialMessage& message);
+  void sendMessage(const std::string& message);
 
   //################################################################################################
-  bool commandInReceiveBuffer(char command);
-
-  //################################################################################################
-  //! Number of messages in queue
+  //! Number of bytes to send
   int queueSize()const;
 
   //################################################################################################
   //! Called each time a message comes in.
-  tp_utils::CallbackCollection<void(const SerialMessage&)> messageReceived;
+  tp_utils::CallbackCollection<void(const std::string&)> lineReceived;
 
   //################################################################################################
   static void configurePortCallback(serial::Serial& serialPort, const PortDetails& port);

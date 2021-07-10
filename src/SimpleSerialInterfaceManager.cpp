@@ -1,5 +1,5 @@
-#include "tp_serial_protocol/SerialInterfaceManager.h"
-#include "tp_serial_protocol/SerialInterface.h"
+#include "tp_serial_protocol/SimpleSerialInterfaceManager.h"
+#include "tp_serial_protocol/SimpleSerialInterface.h"
 
 #include "tp_serial_protocol/SerialMessage.h"
 #include "tp_serial_protocol/Discovery.h"
@@ -15,11 +15,11 @@ namespace tp_serial_protocol
 //##################################################################################################
 struct DeviceDetails_lt
 {
-  SerialInterfaceManager* q;
+  SimpleSerialInterfaceManager* q;
 
   tp_serial_protocol::PortDetails port;
 
-  SerialInterface* serialInterface;
+  SimpleSerialInterface* serialInterface;
 
   //################################################################################################
   DeviceDetails_lt():
@@ -30,7 +30,7 @@ struct DeviceDetails_lt
   }
 
   //################################################################################################
-  DeviceDetails_lt(SerialInterfaceManager* q_, const tp_serial_protocol::PortDetails& port_):
+  DeviceDetails_lt(SimpleSerialInterfaceManager* q_, const tp_serial_protocol::PortDetails& port_):
     q(q_),
     port(port_),
     serialInterface(nullptr)
@@ -46,14 +46,12 @@ struct DeviceDetails_lt
 };
 
 //##################################################################################################
-struct SerialInterfaceManager::Private
+struct SimpleSerialInterfaceManager::Private
 {
-  SerialInterfaceManager* q;
+  SimpleSerialInterfaceManager* q;
 
-  std::string deviceType;
   tp_utils::AbstractCrossThreadCallbackFactory* crossThreadCallbackFactory;
-  std::vector<std::string> blackList;
-  std::vector<std::string> whiteList;
+  std::vector<std::string> paths;
 
   std::vector<DeviceDetails_lt*> devices;
 
@@ -65,16 +63,10 @@ struct SerialInterfaceManager::Private
   std::vector<std::pair<void (*)(void*, serial::Serial&, const PortDetails&), void*>> configurePortCallbacks;
 
   //################################################################################################
-  Private(SerialInterfaceManager* q_,
-          const std::string& deviceType_,
-          tp_utils::AbstractCrossThreadCallbackFactory* crossThreadCallbackFactory_,
-          const std::vector<std::string>& blackList_,
-          const std::vector<std::string>& whiteList_):
+  Private(SimpleSerialInterfaceManager* q_,
+          tp_utils::AbstractCrossThreadCallbackFactory* crossThreadCallbackFactory_):
     q(q_),
-    deviceType(deviceType_),
-    crossThreadCallbackFactory(crossThreadCallbackFactory_),
-    blackList(blackList_),
-    whiteList(whiteList_)
+    crossThreadCallbackFactory(crossThreadCallbackFactory_)
   {
     timerCallback.reset(crossThreadCallbackFactory->produce([=]{poll();}));
   }
@@ -91,33 +83,30 @@ struct SerialInterfaceManager::Private
     discovery.detect();
     for(const tp_serial_protocol::PortDetails& port : discovery.detectedPorts())
     {
-      bool found = false;
+       bool found = false;
 
-      if(tpContains(blackList, port.portString))
-        continue;
+       if(!tpContains(paths, port.path))
+         continue;
 
-      if(!whiteList.empty() && !tpContains(whiteList, port.portString))
-        continue;
+       int fMax = devices.size();
+       for(int f=0; f<fMax; f++)
+       {
+         const DeviceDetails_lt* device = devices.at(f);
 
-      int fMax = devices.size();
-      for(int f=0; f<fMax; f++)
-      {
-        const DeviceDetails_lt* device = devices.at(f);
+         if(device->port.path == port.path)
+         {
+           validIndexes.insert(f);
+           found = true;
+           break;
+         }
+       }
 
-        if(device->port.path == port.path)
-        {
-          validIndexes.insert(f);
-          found = true;
-          break;
-        }
-      }
-
-      if(!found)
-      {
-        changed=true;
-        validIndexes.insert(devices.size());
-        devices.push_back(new DeviceDetails_lt(q, port));
-      }
+       if(!found)
+       {
+         changed=true;
+         validIndexes.insert(devices.size());
+         devices.push_back(new DeviceDetails_lt(q, port));
+       }
     }
 
 
@@ -149,14 +138,8 @@ struct SerialInterfaceManager::Private
       //-- Connect if we are not already -----------------------------------------------------------
       if(!device->serialInterface)
       {
-        device->serialInterface = new SerialInterface(device->port, crossThreadCallbackFactory, configurePortCallback);
-        device->serialInterface->messageReceived.addCallback([=](const SerialMessage& message){messageReceivedCallback(message, device);});
-      }
-
-      //-- Interrogate the device for its type -----------------------------------------------------
-      if(device->serialInterface && device->serialInterface->connected())
-      {
-        device->serialInterface->sendMessage(SerialMessage('t', std::string()));
+        device->serialInterface = new SimpleSerialInterface(device->port, crossThreadCallbackFactory, configurePortCallback);
+        device->serialInterface->lineReceived.addCallback([=](const std::string& line){messageReceivedCallback(line, device);});
       }
     }
 
@@ -167,29 +150,8 @@ struct SerialInterfaceManager::Private
   }
 
   //################################################################################################
-  void messageReceivedCallback(const SerialMessage& message, DeviceDetails_lt* device)
+  void messageReceivedCallback(const std::string& message, DeviceDetails_lt* device)
   {
-    //-- 't' Type identification request -----------------------------------------------------------
-    if(message.command == 't')
-    {
-      if(device->serialInterface)
-        device->serialInterface->sendMessage(SerialMessage('T', deviceType));
-    }
-
-
-    //-- 'T' Type identification response ----------------------------------------------------------
-    else if(message.command == 'T' && device->serialInterface)
-    {
-      if(device->port.deviceType != message.data)
-      {
-        device->port.deviceType = message.data;
-
-        //Notify changes
-        q->managedPortsChanged();
-      }
-    }
-
-
     //-- Call the callback -------------------------------------------------------------------------
     q->messageReceived(message, device->port);
   };
@@ -203,41 +165,38 @@ struct SerialInterfaceManager::Private
         details.first(details.second, serialPort, port);
     });
   };
+
+  //################################################################################################
+  tp_utils::Callback<void()> listChanged = [&]
+  {
+    q->detectedPortsChanged();
+  };
 };
 
 //##################################################################################################
-SerialInterfaceManager::SerialInterfaceManager(const std::string& deviceType,
-                                               tp_utils::AbstractCrossThreadCallbackFactory* crossThreadCallbackFactory,
-                                               const std::vector<std::string>& blackList,
-                                               const std::vector<std::string>& whiteList):
-  d(new Private(this, deviceType, crossThreadCallbackFactory, blackList, whiteList))
+SimpleSerialInterfaceManager::SimpleSerialInterfaceManager(tp_utils::AbstractCrossThreadCallbackFactory* crossThreadCallbackFactory):
+  d(new Private(this, crossThreadCallbackFactory))
 {
-
+  d->listChanged.connect(d->discovery.listChanged);
 }
 
 //##################################################################################################
-SerialInterfaceManager::~SerialInterfaceManager()
+SimpleSerialInterfaceManager::~SimpleSerialInterfaceManager()
 {
   if(!d->configurePortCallbacks.empty())
-    tpWarning() << "Error! SerialInterfaceManager::~SerialInterfaceManager configurePortCallbacks not empty!";
+    tpWarning() << "Error! SimpleSerialInterfaceManager::~SimpleSerialInterfaceManager configurePortCallbacks not empty!";
 
   delete d;
 }
 
 //##################################################################################################
-void SerialInterfaceManager::setWhiteList(const std::vector<std::string>& whiteList)
+void SimpleSerialInterfaceManager::setPaths(const std::vector<std::string>& paths)
 {
-  d->whiteList = whiteList;
+  d->paths = paths;
 }
 
 //##################################################################################################
-void SerialInterfaceManager::addToBlackList(const std::string& portString)
-{
-  d->blackList.push_back(portString);
-}
-
-//##################################################################################################
-void SerialInterfaceManager::start()
+void SimpleSerialInterfaceManager::start()
 {
   if(d->timer)
     return;
@@ -246,13 +205,13 @@ void SerialInterfaceManager::start()
 }
 
 //##################################################################################################
-std::vector<PortDetails> SerialInterfaceManager::detectedPorts()
+std::vector<PortDetails> SimpleSerialInterfaceManager::detectedPorts()
 {
   return d->discovery.detectedPorts();
 }
 
 //##################################################################################################
-std::vector<PortDetails> SerialInterfaceManager::managedPorts()
+std::vector<PortDetails> SimpleSerialInterfaceManager::managedPorts()
 {
   std::vector<PortDetails> managedPorts;
 
@@ -263,7 +222,7 @@ std::vector<PortDetails> SerialInterfaceManager::managedPorts()
 }
 
 //##################################################################################################
-bool SerialInterfaceManager::connected(const std::string& path)
+bool SimpleSerialInterfaceManager::connected(const std::string& path)
 {
   for(const DeviceDetails_lt* device : d->devices)
   {
@@ -279,7 +238,7 @@ bool SerialInterfaceManager::connected(const std::string& path)
 }
 
 //##################################################################################################
-void SerialInterfaceManager::sendMessage(const std::string& path, const SerialMessage& message)
+void SimpleSerialInterfaceManager::sendMessage(const std::string& path, const std::string& message)
 {
   for(const DeviceDetails_lt* device : d->devices)
   {
@@ -297,17 +256,7 @@ void SerialInterfaceManager::sendMessage(const std::string& path, const SerialMe
 }
 
 //##################################################################################################
-bool SerialInterfaceManager::commandInReceiveBuffer(const std::string& path, char command)
-{
-  for(const DeviceDetails_lt* dev : d->devices)
-    if(dev->port.path == path)
-      return (dev->serialInterface)?dev->serialInterface->commandInReceiveBuffer(command):false;
-
-  return false;
-}
-
-//##################################################################################################
-int SerialInterfaceManager::queueSize(const std::string& path)const
+int SimpleSerialInterfaceManager::queueSize(const std::string& path)const
 {
   for(const DeviceDetails_lt* device : d->devices)
   {
@@ -324,13 +273,13 @@ int SerialInterfaceManager::queueSize(const std::string& path)const
 
 
 //##################################################################################################
-void SerialInterfaceManager::addConfigurePortCallback(void (*callback)(void*, serial::Serial& port, const PortDetails&), void* opaque)
+void SimpleSerialInterfaceManager::addConfigurePortCallback(void (*callback)(void*, serial::Serial& port, const PortDetails&), void* opaque)
 {
   d->configurePort_mutex.locked([&]{d->configurePortCallbacks.emplace_back(callback, opaque);});
 }
 
 //##################################################################################################
-void SerialInterfaceManager::removeConfigurePortCallback(void (*callback)(void*, serial::Serial& port, const PortDetails&), void* opaque)
+void SimpleSerialInterfaceManager::removeConfigurePortCallback(void (*callback)(void*, serial::Serial& port, const PortDetails&), void* opaque)
 {
   tpRemoveOne(d->configurePortCallbacks, std::pair(callback, opaque));
 }

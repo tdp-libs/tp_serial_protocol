@@ -83,6 +83,8 @@ void Discovery::detect()
       d->detectedPorts.emplace_back("FTDI", path, port);
     else if(tpContains(port, "Prolific"))
       d->detectedPorts.emplace_back("Prolific", path, port);
+    else if(tpContains(port, "TPCSD"))
+      d->detectedPorts.emplace_back("TPCSD", path, port);
     else
       d->detectedPorts.emplace_back("Other", path, port);
   }

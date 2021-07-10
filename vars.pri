@@ -9,6 +9,12 @@ HEADERS += inc/tp_serial_protocol/Discovery.h
 SOURCES += src/PortDetails.cpp
 HEADERS += inc/tp_serial_protocol/PortDetails.h
 
+SOURCES += src/SimpleSerialInterface.cpp
+HEADERS += inc/tp_serial_protocol/SimpleSerialInterface.h
+
+SOURCES += src/SimpleSerialInterfaceManager.cpp
+HEADERS += inc/tp_serial_protocol/SimpleSerialInterfaceManager.h
+
 SOURCES += src/SerialInterface.cpp
 HEADERS += inc/tp_serial_protocol/SerialInterface.h
 
