@@ -29,7 +29,16 @@ public:
 
   //################################################################################################
   //! Set the paths that we want to communicate with
-  void setPaths(const std::vector<std::string>& path);
+  /*!
+  Remember to call clearPaths() once you are done.
+
+  \param path
+  \param owner The object asking for these paths.
+  */
+  void setPaths(const std::vector<std::string>& path, void* owner);
+
+  //################################################################################################
+  void clearPaths(void* owner);
 
   //################################################################################################
   //! Call this once after you have configured your callbacks

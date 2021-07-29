@@ -51,7 +51,7 @@ struct SimpleSerialInterfaceManager::Private
   SimpleSerialInterfaceManager* q;
 
   tp_utils::AbstractCrossThreadCallbackFactory* crossThreadCallbackFactory;
-  std::vector<std::string> paths;
+  std::unordered_map<void*, std::vector<std::string>> paths;
 
   std::vector<DeviceDetails_lt*> devices;
 
@@ -72,6 +72,15 @@ struct SimpleSerialInterfaceManager::Private
   }
 
   //################################################################################################
+  bool pathRequested(const std::string& path)
+  {
+    for(const auto& p : paths)
+      if(tpContains(p.second, path))
+        return true;
+    return false;
+  }
+
+  //################################################################################################
   void poll()
   {
     bool changed=false;
@@ -85,7 +94,7 @@ struct SimpleSerialInterfaceManager::Private
     {
        bool found = false;
 
-       if(!tpContains(paths, port.path))
+       if(!pathRequested(port.path))
          continue;
 
        int fMax = devices.size();
@@ -190,9 +199,15 @@ SimpleSerialInterfaceManager::~SimpleSerialInterfaceManager()
 }
 
 //##################################################################################################
-void SimpleSerialInterfaceManager::setPaths(const std::vector<std::string>& paths)
+void SimpleSerialInterfaceManager::setPaths(const std::vector<std::string>& paths, void* owner)
 {
-  d->paths = paths;
+  d->paths[owner] = paths;
+}
+
+//##################################################################################################
+void SimpleSerialInterfaceManager::clearPaths(void* owner)
+{
+  d->paths.erase(owner);
 }
 
 //##################################################################################################
