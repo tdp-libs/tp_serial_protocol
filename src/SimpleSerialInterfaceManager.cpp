@@ -178,6 +178,7 @@ struct SimpleSerialInterfaceManager::Private
   //################################################################################################
   tp_utils::Callback<void()> listChanged = [&]
   {
+    tpDebug() << "B: " << discovery.detectedPorts().size();
     q->detectedPortsChanged();
   };
 };
