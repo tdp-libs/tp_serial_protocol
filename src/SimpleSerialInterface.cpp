@@ -87,6 +87,8 @@ public:
   //################################################################################################
   void run()
   {
+    TP_CLEANUP([&]{mutex.locked([&]{connected = false;});});
+
     serial::Serial serialPort;
 
     try
@@ -119,6 +121,21 @@ public:
     catch(const serial::IOException&)
     {
       tpWarning() << "Error serialPort.open() serial::IOException, path: " << port.path;
+      return;
+    }
+
+    try
+    {
+      serialPort.setDTR(true);
+    }
+    catch(const serial::PortNotOpenedException&)
+    {
+      tpWarning() << "Error serialPort.open() serial::PortNotOpenedException, path: " << port.path;
+      return;
+    }
+    catch(const serial::SerialException&)
+    {
+      tpWarning() << "Error serialPort.open() serial::SerialException, path: " << port.path;
       return;
     }
 
@@ -222,7 +239,6 @@ public:
 
       mutex.lock();
     }
-    connected = false;
     mutex.unlock();
   }
 
