@@ -89,7 +89,6 @@ void Discovery::detect()
       d->detectedPorts.emplace_back("Other", path, port);
   }
 
-  tpDebug() << "A: " << d->detectedPorts.size();
   listChanged();
 }
 

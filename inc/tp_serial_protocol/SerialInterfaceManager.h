@@ -112,7 +112,7 @@ public:
   bool commandInReceiveBuffer(const std::string& path, char command);
 
   //################################################################################################
-  int queueSize(const std::string& path)const;
+  size_t queueSize(const std::string& path)const;
 
   //################################################################################################
   //! This is called just before a serial port is opened

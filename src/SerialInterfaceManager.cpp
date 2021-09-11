@@ -85,7 +85,7 @@ struct SerialInterfaceManager::Private
     bool changed=false;
 
     //Holds the indexes that we found
-    std::unordered_set<int> validIndexes;
+    std::unordered_set<size_t> validIndexes;
 
     //-- Create DeviceDetails_lt for each port ----------------------------------------------------
     discovery.detect();
@@ -99,8 +99,8 @@ struct SerialInterfaceManager::Private
       if(!whiteList.empty() && !tpContains(whiteList, port.portString))
         continue;
 
-      int fMax = devices.size();
-      for(int f=0; f<fMax; f++)
+      size_t fMax = devices.size();
+      for(size_t f=0; f<fMax; f++)
       {
         const DeviceDetails_lt* device = devices.at(f);
 
@@ -122,7 +122,7 @@ struct SerialInterfaceManager::Private
 
 
     //-- Delete obsolete DeviceDetails_lt ---------------------------------------------------------
-    for(int f=devices.size()-1; f>=0; f--)
+    for(size_t f=devices.size()-1; f<devices.size(); f--)
     {
       if(!tpContains(validIndexes, f))
       {
@@ -133,8 +133,8 @@ struct SerialInterfaceManager::Private
 
 
     //-- Maintain connections ----------------------------------------------------------------------
-    int fMax = devices.size();
-    for(int f=0; f<fMax; f++)
+    size_t fMax = devices.size();
+    for(size_t f=0; f<fMax; f++)
     {
       DeviceDetails_lt* device = devices[f];
 
@@ -192,12 +192,12 @@ struct SerialInterfaceManager::Private
 
     //-- Call the callback -------------------------------------------------------------------------
     q->messageReceived(message, device->port);
-  };
+  }
 
   //################################################################################################
   std::function<void(serial::Serial&, const PortDetails&)> configurePortCallback = [&](serial::Serial& serialPort, const PortDetails& port)
   {
-    configurePort_mutex.locked([&]
+    configurePort_mutex.locked(TPMc [&]
     {
       for(const auto& details : configurePortCallbacks)
         details.first(details.second, serialPort, port);
@@ -307,7 +307,7 @@ bool SerialInterfaceManager::commandInReceiveBuffer(const std::string& path, cha
 }
 
 //##################################################################################################
-int SerialInterfaceManager::queueSize(const std::string& path)const
+size_t SerialInterfaceManager::queueSize(const std::string& path)const
 {
   for(const DeviceDetails_lt* device : d->devices)
   {
@@ -326,7 +326,7 @@ int SerialInterfaceManager::queueSize(const std::string& path)const
 //##################################################################################################
 void SerialInterfaceManager::addConfigurePortCallback(void (*callback)(void*, serial::Serial& port, const PortDetails&), void* opaque)
 {
-  d->configurePort_mutex.locked([&]{d->configurePortCallbacks.emplace_back(callback, opaque);});
+  d->configurePort_mutex.locked(TPMc [&]{d->configurePortCallbacks.emplace_back(callback, opaque);});
 }
 
 //##################################################################################################

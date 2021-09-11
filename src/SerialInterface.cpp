@@ -30,10 +30,10 @@ public:
   bool connected{false};
   bool finish{false};
 
-  TPMutex messageQueueMutex;
+  TPMutex messageQueueMutex{TPM};
   std::vector<SerialMessage> messageQueue;
 
-  TPMutex receivedMessageMutex;
+  TPMutex receivedMessageMutex{TPM};
   std::vector<SerialMessage> receivedMessages;
 
   const std::function<void(serial::Serial&, const PortDetails&)>& configurePort_callback;
@@ -152,7 +152,7 @@ public:
 
 
 
-    mutex.lock();
+    mutex.lock(TPM);
     while(!finish && serialPort.isOpen())
     {
       // //We expect to get timeouts thats normal when waiting for data
@@ -169,7 +169,7 @@ public:
       //   break;
       // }
 
-      mutex.unlock();
+      mutex.unlock(TPM);
 
       size_t a{0};
       try
@@ -179,7 +179,7 @@ public:
       catch(const serial::IOException&)
       {
         tpWarning() << "Error serialPort.available() serial::IOException, path: " << port.path;
-        mutex.lock();
+        mutex.lock(TPM);
         break;
       }
 
@@ -192,19 +192,19 @@ public:
         catch(const serial::PortNotOpenedException&)
         {
           tpWarning() << "Error serialPort.read() serial::PortNotOpenedException, path: " << port.path;
-          mutex.lock();
+          mutex.lock(TPM);
           break;
         }
         catch(const serial::SerialException&)
         {
           tpWarning() << "Error serialPort.read() serial::PortNotOpenedException, path: " << port.path;
-          mutex.lock();
+          mutex.lock(TPM);
           break;
         }
 
         if(partialPacket.hasMessage())
         {
-          receivedMessageMutex.locked([&]
+          receivedMessageMutex.locked(TPMc [&]
           {
             std::vector<SerialMessage> messages = partialPacket.takeMessages();
             receivedMessages.reserve(receivedMessages.size()+messages.size());
@@ -236,7 +236,7 @@ public:
         // }
 
         bool failed=false;
-        messageQueueMutex.locked([&]
+        messageQueueMutex.locked(TPMc [&]
         {
           if(!messageQueue.empty())
           {
@@ -267,22 +267,22 @@ public:
 
         if(failed)
         {
-          mutex.lock();
+          mutex.lock(TPM);
           break;
         }
       }
 
-      mutex.lock();
+      mutex.lock(TPM);
     }
     connected = false;
-    mutex.unlock();
+    mutex.unlock(TPM);
   }
 
   //################################################################################################
   void messagesReceived()
   {
     std::vector<SerialMessage> messages;
-    receivedMessageMutex.locked([&]{messages.swap(receivedMessages);});
+    receivedMessageMutex.locked(TPMc [&]{messages.swap(receivedMessages);});
     for(const auto& message : messages)
       q->messageReceived(message);
   }
@@ -330,7 +330,7 @@ bool SerialInterface::commandInReceiveBuffer(char command)
 }
 
 //##################################################################################################
-int SerialInterface::queueSize()const
+size_t SerialInterface::queueSize()const
 {
   TP_MUTEX_LOCKER(d->messageQueueMutex);
   return d->messageQueue.size();
